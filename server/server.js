@@ -53,8 +53,15 @@ function getPostData(request,callback) {
 
 app.post("/connect",function(request,response) {
   getPostData(request,function(body) {
-    console.log(body);
-    response.send("You said: " + body);
+    var cg = new Cryptographer();
+    if ( cg.decrypt(body,cg.generateKey(PASSWORD)) == "siftp-authentication" ) {
+      var id = Math.floor(Math.random() * 1e8);
+      var key = cg.generateKey();
+      AUTH_KEYS[id] = key;
+      response.send(cg.encrypt(`${id},${key}`,cg.generateKey(PASSWORD)));
+    } else {
+      response.send("error");
+    }
   });
 });
 
@@ -65,5 +72,5 @@ app.get("/blank",function(request,response) {
 app.listen(PORT,function() {
   console.log("Listening on port " + PORT);
   var cg = new Cryptographer();
-  console.log(cg.encrypt("siftp-authentication",PASSWORD));
+  console.log(cg.encrypt("siftp-authentication",cg.generateKey(PASSWORD)));
 });
