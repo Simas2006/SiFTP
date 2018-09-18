@@ -9,6 +9,7 @@
   "author": "Simas Juknelis",
   "license": "MIT",
   "dependencies": {
+    "crypto-js": "^3.1.9-1",
     "request": "^2.88.0"
   }
 }
