@@ -1,0 +1,14 @@
+{
+  "name": "siftp-client",
+  "version": "1.0.0",
+  "description": "Client for SiFTP",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js"
+  },
+  "author": "Simas Juknelis",
+  "license": "MIT",
+  "dependencies": {
+    "request": "^2.88.0"
+  }
+}
