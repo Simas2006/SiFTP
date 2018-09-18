@@ -50,7 +50,7 @@ function loadParams(callback) {
 
 function generateTable(files) {
   files = files.sort();
-  files = files.map(item => [item.slice(1),item.charAt(0) == "d" ? "Directory" : "File"]);
+  files = files.filter(item => item).map(item => [item.slice(1),item.charAt(0) == "d" ? "Directory" : "File"]);
   files = [["Name","Type"]].concat(files);
   var max = files.reduce((a,b) => Math.max(a,b[0].length),0);
   var set = [];
@@ -58,6 +58,7 @@ function generateTable(files) {
     set.push(`${files[i][0]}${" ".repeat(max - files[i][0].length)} | ${files[i][1]}`);
     if ( i == 0 ) set.push("-".repeat(max + 12));
   }
+  if ( files.length == 1 ) set.push("Directory empty");
   console.log(set.join("\n"));
 }
 
@@ -69,7 +70,10 @@ function listFolder(callback) {
       body: cg.encrypt(PATH,AUTH_KEY),
     },function(err,response,body) {
       if ( err ) throw err;
-      if ( body == "error" ) throw new Error("Failed to communicate with server");
+      if ( body == "error" ) {
+        throw new Error("Failed to communicate with server");
+        return;
+      }
       var files = cg.decrypt(body,AUTH_KEY).split(",");
       if ( callback ) {
         callback(files);
@@ -81,5 +85,42 @@ function listFolder(callback) {
   });
 }
 
+function changeDirectory(toDir) {
+  if ( toDir == ".." ) {
+    loadParams(function() {
+      PATH = (PATH.split("/").slice(0,-1).join("/")) || "/";
+      var obj = {
+        mode: "connected",
+        ip: IP,
+        clientID: CLIENT_ID,
+        key: AUTH_KEY,
+        path: PATH
+      }
+      fs.writeFile(__dirname + "/loginData.json",JSON.stringify(obj,null,2),function(err) {
+        if ( err ) throw err;
+      });
+    });
+  } else {
+    listFolder(function(files) {
+      if ( files.indexOf("d" + toDir) <= -1 ) {
+        throw new Error("Invalid folder name in working directory");
+        return;
+      } else {
+        PATH += "/" + toDir;
+        PATH = PATH.split("//").join("/");
+        var obj = {
+          mode: "connected",
+          ip: IP,
+          clientID: CLIENT_ID,
+          key: AUTH_KEY,
+          path: PATH
+        }
+        fs.writeFile(__dirname + "/loginData.json",JSON.stringify(obj,null,2),function(err) {
+          if ( err ) throw err;
+        });
+      }
+    });
+  }
+}
 
-listFolder();
+changeDirectory("folder");
