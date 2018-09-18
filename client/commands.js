@@ -123,4 +123,25 @@ function changeDirectory(toDir) {
   }
 }
 
-changeDirectory("folder");
+function removeFile(toRem) {
+  listFolder(function(files) {
+    if ( files.indexOf("d" + toRem) <= -1 && files.indexOf("f" + toRem) <= -1 ) {
+      throw new Error("Invalid file or directory");
+      return;
+    } else {
+      var cg = new Cryptographer();
+      request.post({
+        url: `http://${IP}:5750/remove?cid=${CLIENT_ID}`,
+        body: cg.encrypt(toRem,AUTH_KEY)
+      },function(err,response,body) {
+        if ( err ) throw err;
+        if ( body == "error" ) {
+          throw new Error("Failed to communicate with server");
+          return;
+        }
+      });
+    }
+  });
+}
+
+removeFile("folder");

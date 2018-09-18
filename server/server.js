@@ -1,6 +1,7 @@
 var fs = require("fs");
 var CryptoJS = require("crypto-js");
 var express = require("express");
+var rimraf = require("rimraf");
 var PORT = process.argv[3] || 5750;
 var PASSWORD = process.argv[2];
 var AUTH_KEYS = {};
@@ -71,7 +72,7 @@ app.post("/list",function(request,response) {
     var cg = new Cryptographer();
     var key = AUTH_KEYS[request.query.cid];
     body = cg.decrypt(body,key);
-    if ( body == "decrypt-failed" || body.indexOf("...") > -1 ) {
+    if ( body == "decrypt-failed" || body.indexOf("..") > -1 ) {
       response.send("error");
     } else {
       fs.readdir(`${__dirname}/data/${body}`,function(err,files) {
@@ -80,6 +81,37 @@ app.post("/list",function(request,response) {
         } else {
           var fileList = files.map(item => `${fs.lstatSync(`${__dirname}/data/${body}/${item}`).isDirectory() ? "d" : "f"}${item}`).join(",");
           response.send(cg.encrypt(fileList,key));
+        }
+      });
+    }
+  });
+});
+
+app.post("/remove",function(request,response) {
+  getPostData(request,function(body) {
+    var cg = new Cryptographer();
+    var key = AUTH_KEYS[request.query.cid];
+    body = cg.decrypt(body,key);
+    if ( body == "decrypt-failed" || body.indexOf("..") > -1 ) {
+      response.send("error");
+    } else {
+      fs.stat(`${__dirname}/data/${body}`,function(err,stats) {
+        if ( err ) {
+          response.send("error");
+        } else {
+          if ( ! stats.isDirectory() ) {
+            fs.unlink(`${__dirname}/data/${body}`,function(err) {
+              if ( err ) throw err;
+              response.send("ok");
+            });
+          } else {
+            rimraf(`${__dirname}/data/${body}`,{
+              disableGlob: true
+            },function(err) {
+              if ( err ) throw err;
+              response.send("ok");
+            });
+          }
         }
       });
     }
