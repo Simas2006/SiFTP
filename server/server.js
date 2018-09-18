@@ -57,10 +57,31 @@ app.post("/connect",function(request,response) {
     if ( cg.decrypt(body,cg.generateKey(PASSWORD)) == "siftp-authentication" ) {
       var id = Math.floor(Math.random() * 1e8);
       var key = cg.generateKey();
+      console.log(id,key);
       AUTH_KEYS[id] = key;
       response.send(cg.encrypt(`${id},${key}`,cg.generateKey(PASSWORD)));
     } else {
       response.send("error");
+    }
+  });
+});
+
+app.post("/list",function(request,response) {
+  getPostData(request,function(body) {
+    var cg = new Cryptographer();
+    var key = AUTH_KEYS[request.query.cid];
+    body = cg.decrypt(body,key);
+    if ( body == "decrypt-failed" || body.indexOf("...") > -1 ) {
+      response.send("error");
+    } else {
+      fs.readdir(`${__dirname}/data/${body}`,function(err,files) {
+        if ( err ) {
+          response.send("error");
+        } else {
+          var fileList = files.map(item => `${fs.lstatSync(`${__dirname}/data/${body}/${item}`).isDirectory() ? "d" : "f"}${item}`).join(",");
+          response.send(cg.encrypt(fileList,key));
+        }
+      });
     }
   });
 });
