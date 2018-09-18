@@ -14,7 +14,7 @@ class Cryptographer {
   encrypt(text,key) {
     key = "/".repeat(32 - key.length) + key;
     var iv = crypto.randomBytes(16);
-    var cipher = crypto.createCipheriv("aes-256-cbc",new Buffer(key),iv);
+    var cipher = crypto.createCipheriv("aes-256-cbc",Buffer.from(key),iv);
     var encrypted = cipher.update(text);
     encrypted = Buffer.concat([encrypted,cipher.final()]);
     return encrypted.toString("hex") + ":" + iv.toString("hex");
@@ -23,9 +23,9 @@ class Cryptographer {
     try {
       key = "/".repeat(32 - key.length) + key;
       text = text.toString().split(":");
-      var iv = new Buffer(text.pop(),"hex");
-      var encrypted = new Buffer(text.join(":"),"hex");
-      var decipher = crypto.createDecipheriv("aes-256-cbc",new Buffer(key),iv);
+      var iv = Buffer.from(text.pop(),"hex");
+      var encrypted = Buffer.from(text.join(":"),"hex");
+      var decipher = crypto.createDecipheriv("aes-256-cbc",Buffer.from(key),iv);
       var decrypted = decipher.update(encrypted);
       decrypted = Buffer.concat([decrypted,decipher.final()]);
       return decrypted.toString();
@@ -127,13 +127,14 @@ app.post("/prepare",function(request,response) {
         if ( err || ["download","upload"].indexOf(body[1]) <= -1 ) {
           response.send("error");
         } else {
-          var iv = CryptoJS.lib.WordArray.random(32);
+          var iv = crypto.randomBytes(16);
           preparations[request.query.cid] = {
             path: body[0],
             mode: body[1],
+            isDirectory: stats.isDirectory(),
             iv: iv
           }
-          response.send(cg.encrypt(iv.toString(CryptoJS.enc.Base64),key));
+          response.send(cg.encrypt(iv.toString("base64"),key));
         }
       });
     }
@@ -141,7 +142,17 @@ app.post("/prepare",function(request,response) {
 });
 
 app.post("/download",function(request,response) {
-  var cipher = Crypto
+  if ( ! preparations[request.query.cid] || preparations[request.query.cid].type == "upload" ) {
+    response.send("error");
+  } else {
+    var key = auth_keys[request.query.cid];
+    var data = preparations[request.query.cid];
+    if ( ! data.isDirectory ) {
+      var cipher = crypto.createCipheriv("aes-256-cbc",Buffer.from(key),data.iv);
+      var read = fs.createReadStream(`${__dirname}/data/${data.path}`);
+      read.pipe(cipher).pipe(response);
+    }
+  }
 });
 
 app.get("/blank",function(request,response) {

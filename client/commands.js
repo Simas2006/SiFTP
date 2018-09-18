@@ -7,7 +7,7 @@ class Cryptographer {
   encrypt(text,key) {
     key = "/".repeat(32 - key.length) + key;
     var iv = crypto.randomBytes(16);
-    var cipher = crypto.createCipheriv("aes-256-cbc",new Buffer(key),iv);
+    var cipher = crypto.createCipheriv("aes-256-cbc",Buffer.from(key),iv);
     var encrypted = cipher.update(text);
     encrypted = Buffer.concat([encrypted,cipher.final()]);
     return encrypted.toString("hex") + ":" + iv.toString("hex");
@@ -16,9 +16,9 @@ class Cryptographer {
     try {
       key = "/".repeat(32 - key.length) + key;
       text = text.toString().split(":");
-      var iv = new Buffer(text.pop(),"hex");
-      var encrypted = new Buffer(text.join(":"),"hex");
-      var decipher = crypto.createDecipheriv("aes-256-cbc",new Buffer(key),iv);
+      var iv = Buffer.from(text.pop(),"hex");
+      var encrypted = Buffer.from(text.join(":"),"hex");
+      var decipher = crypto.createDecipheriv("aes-256-cbc",Buffer.from(key),iv);
       var decrypted = decipher.update(encrypted);
       decrypted = Buffer.concat([decrypted,decipher.final()]);
       return decrypted.toString();
@@ -138,10 +138,7 @@ function removeFile(toRemove) {
 
 function downloadFile(toDownload) {
   listFolder(function(files) {
-    if ( files.indexOf("d" + toDownload) <= -1 && files.indexOf("f" + toDownload) <= -1 ) {
-      throw new Error("Invalid file or directory");
-      return;
-    } else {
+    if ( files.indexOf("f" + toDownload) > -1 ) {
       var cg = new Cryptographer();
       request.post({
         url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
@@ -152,8 +149,21 @@ function downloadFile(toDownload) {
           throw new Error("Failed to communicate with server");
           return;
         }
-        console.log("here");
+        var iv = cg.decrypt(body,AUTH_KEY);
+        var decipher = crypto.createDecipheriv("aes-256-cbc",Buffer.from(AUTH_KEY),Buffer.from(iv,"base64"));
+        var write = fs.createWriteStream(`./${toDownload}`);
+        request.post({
+          url: `http://${IP}:5750/download?cid=${CLIENT_ID}`,
+          body: ""
+        }).pipe(decipher).pipe(write);
       });
+    } else if ( files.indexOf("d" + toDownload) > -1 ) {
+      
+    } else {
+      throw new Error("Invalid file or directory");
+      return;
     }
   });
 }
+
+downloadFile("another_one.sage");
