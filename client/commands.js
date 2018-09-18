@@ -1,38 +1,30 @@
 var fs = require("fs");
-var CryptoJS = require("crypto-js");
+var crypto = require("crypto");
 var request = require("request");
 var IP,CLIENT_ID,AUTH_KEY,PATH;
 
 class Cryptographer {
-  encrypt(message,key) {
-    key = CryptoJS.enc.Base64.parse(key);
-    var iv = CryptoJS.lib.WordArray.random(32);
-    var encrypted = CryptoJS.AES.encrypt(
-      message.toString(CryptoJS.enc.Base64),
-      key,
-      {iv}
-    );
-    return [
-      encrypted.ciphertext.toString(CryptoJS.enc.Base64),
-      iv.toString(CryptoJS.enc.Base64)
-    ].join(":");
+  encrypt(text,key) {
+    key = "/".repeat(32 - key.length) + key;
+    var iv = crypto.randomBytes(16);
+    var cipher = crypto.createCipheriv("aes-256-cbc",new Buffer(key),iv);
+    var encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted,cipher.final()]);
+    return encrypted.toString("hex") + ":" + iv.toString("hex");
   }
-  decrypt(message,key) {
+  decrypt(text,key) {
     try {
-      key = CryptoJS.enc.Base64.parse(key);
-      var decrypted = CryptoJS.AES.decrypt(
-        message.split(":")[0],
-        key,
-        {iv: CryptoJS.enc.Base64.parse(message.split(":")[1])}
-      );
-      return decrypted.toString(CryptoJS.enc.Utf8);
+      key = "/".repeat(32 - key.length) + key;
+      text = text.toString().split(":");
+      var iv = new Buffer(text.pop(),"hex");
+      var encrypted = new Buffer(text.join(":"),"hex");
+      var decipher = crypto.createDecipheriv("aes-256-cbc",new Buffer(key),iv);
+      var decrypted = decipher.update(encrypted);
+      decrypted = Buffer.concat([decrypted,decipher.final()]);
+      return decrypted.toString();
     } catch ( err ) {
       return "decrypt-failed";
     }
-  }
-  generateKey(passphrase) {
-    if ( passphrase ) return passphrase + "/".repeat(32 - passphrase.length);
-    else return CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Base64);
   }
 }
 
@@ -123,16 +115,16 @@ function changeDirectory(toDir) {
   }
 }
 
-function removeFile(toRem) {
+function removeFile(toRemove) {
   listFolder(function(files) {
-    if ( files.indexOf("d" + toRem) <= -1 && files.indexOf("f" + toRem) <= -1 ) {
+    if ( files.indexOf("d" + toRemove) <= -1 && files.indexOf("f" + toRemove) <= -1 ) {
       throw new Error("Invalid file or directory");
       return;
     } else {
       var cg = new Cryptographer();
       request.post({
         url: `http://${IP}:5750/remove?cid=${CLIENT_ID}`,
-        body: cg.encrypt(toRem,AUTH_KEY)
+        body: cg.encrypt(toRemove,AUTH_KEY)
       },function(err,response,body) {
         if ( err ) throw err;
         if ( body == "error" ) {
@@ -144,4 +136,24 @@ function removeFile(toRem) {
   });
 }
 
-removeFile("folder");
+function downloadFile(toDownload) {
+  listFolder(function(files) {
+    if ( files.indexOf("d" + toDownload) <= -1 && files.indexOf("f" + toDownload) <= -1 ) {
+      throw new Error("Invalid file or directory");
+      return;
+    } else {
+      var cg = new Cryptographer();
+      request.post({
+        url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
+        body: cg.encrypt(`${toDownload},download`,AUTH_KEY)
+      },function(err,response,body) {
+        if ( err ) throw err;
+        if ( body == "error" ) {
+          throw new Error("Failed to communicate with server");
+          return;
+        }
+        console.log("here");
+      });
+    }
+  });
+}

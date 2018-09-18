@@ -1,44 +1,40 @@
 var fs = require("fs");
-var CryptoJS = require("crypto-js");
+var crypto = require("crypto");
 var express = require("express");
 var rimraf = require("rimraf");
 var PORT = process.argv[3] || 5750;
 var PASSWORD = process.argv[2];
-var AUTH_KEYS = {};
+var auth_keys = {};
+var preparations = {};
 var app = express();
 
 if ( ! PASSWORD ) throw new Error("No password provided");
 
 class Cryptographer {
-  encrypt(message,key) {
-    key = CryptoJS.enc.Base64.parse(key);
-    var iv = CryptoJS.lib.WordArray.random(32);
-    var encrypted = CryptoJS.AES.encrypt(
-      message.toString(CryptoJS.enc.Base64),
-      key,
-      {iv}
-    );
-    return [
-      encrypted.ciphertext.toString(CryptoJS.enc.Base64),
-      iv.toString(CryptoJS.enc.Base64)
-    ].join(":");
+  encrypt(text,key) {
+    key = "/".repeat(32 - key.length) + key;
+    var iv = crypto.randomBytes(16);
+    var cipher = crypto.createCipheriv("aes-256-cbc",new Buffer(key),iv);
+    var encrypted = cipher.update(text);
+    encrypted = Buffer.concat([encrypted,cipher.final()]);
+    return encrypted.toString("hex") + ":" + iv.toString("hex");
   }
-  decrypt(message,key) {
+  decrypt(text,key) {
     try {
-      key = CryptoJS.enc.Base64.parse(key);
-      var decrypted = CryptoJS.AES.decrypt(
-        message.split(":")[0],
-        key,
-        {iv: CryptoJS.enc.Base64.parse(message.split(":")[1])}
-      );
-      return decrypted.toString(CryptoJS.enc.Utf8);
+      key = "/".repeat(32 - key.length) + key;
+      text = text.toString().split(":");
+      var iv = new Buffer(text.pop(),"hex");
+      var encrypted = new Buffer(text.join(":"),"hex");
+      var decipher = crypto.createDecipheriv("aes-256-cbc",new Buffer(key),iv);
+      var decrypted = decipher.update(encrypted);
+      decrypted = Buffer.concat([decrypted,decipher.final()]);
+      return decrypted.toString();
     } catch ( err ) {
       return "decrypt-failed";
     }
   }
-  generateKey(passphrase) {
-    if ( passphrase ) return passphrase + "/".repeat(32 - passphrase.length);
-    else return CryptoJS.lib.WordArray.random(32).toString(CryptoJS.enc.Base64);
+  generateKey() {
+    return crypto.randomBytes(24).toString("base64");
   }
 }
 
@@ -55,12 +51,12 @@ function getPostData(request,callback) {
 app.post("/connect",function(request,response) {
   getPostData(request,function(body) {
     var cg = new Cryptographer();
-    if ( cg.decrypt(body,cg.generateKey(PASSWORD)) == "siftp-authentication" ) {
+    if ( cg.decrypt(body,PASSWORD) == "siftp-authentication" ) {
       var id = Math.floor(Math.random() * 1e8);
       var key = cg.generateKey();
       console.log(id,key);
-      AUTH_KEYS[id] = key;
-      response.send(cg.encrypt(`${id},${key}`,cg.generateKey(PASSWORD)));
+      auth_keys[id] = key;
+      response.send(cg.encrypt(`${id},${key}`,PASSWORD));
     } else {
       response.send("error");
     }
@@ -70,7 +66,7 @@ app.post("/connect",function(request,response) {
 app.post("/list",function(request,response) {
   getPostData(request,function(body) {
     var cg = new Cryptographer();
-    var key = AUTH_KEYS[request.query.cid];
+    var key = auth_keys[request.query.cid];
     body = cg.decrypt(body,key);
     if ( body == "decrypt-failed" || body.indexOf("..") > -1 ) {
       response.send("error");
@@ -90,7 +86,7 @@ app.post("/list",function(request,response) {
 app.post("/remove",function(request,response) {
   getPostData(request,function(body) {
     var cg = new Cryptographer();
-    var key = AUTH_KEYS[request.query.cid];
+    var key = auth_keys[request.query.cid];
     body = cg.decrypt(body,key);
     if ( body == "decrypt-failed" || body.indexOf("..") > -1 ) {
       response.send("error");
@@ -118,6 +114,36 @@ app.post("/remove",function(request,response) {
   });
 });
 
+app.post("/prepare",function(request,response) {
+  getPostData(request,function(body) {
+    var cg = new Cryptographer();
+    var key = auth_keys[request.query.cid];
+    body = cg.decrypt(body,key);
+    if ( body == "decrypt-failed" || body.indexOf("..") > -1 ) {
+      response.send("error");
+    } else {
+      body = body.split(",");
+      fs.stat(`${__dirname}/data/${body[0]}`,function(err,stats) {
+        if ( err || ["download","upload"].indexOf(body[1]) <= -1 ) {
+          response.send("error");
+        } else {
+          var iv = CryptoJS.lib.WordArray.random(32);
+          preparations[request.query.cid] = {
+            path: body[0],
+            mode: body[1],
+            iv: iv
+          }
+          response.send(cg.encrypt(iv.toString(CryptoJS.enc.Base64),key));
+        }
+      });
+    }
+  });
+});
+
+app.post("/download",function(request,response) {
+  var cipher = Crypto
+});
+
 app.get("/blank",function(request,response) {
   response.send("hi");
 });
@@ -125,5 +151,5 @@ app.get("/blank",function(request,response) {
 app.listen(PORT,function() {
   console.log("Listening on port " + PORT);
   var cg = new Cryptographer();
-  console.log(cg.encrypt("siftp-authentication",cg.generateKey(PASSWORD)));
+  console.log(cg.encrypt("siftp-authentication",PASSWORD));
 });
