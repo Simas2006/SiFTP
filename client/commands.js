@@ -1,7 +1,9 @@
 var fs = require("fs");
 var crypto = require("crypto");
 var request = require("request");
+var {spawn} = require("child_process");
 var IP,CLIENT_ID,AUTH_KEY,PATH;
+var unzipProc;
 
 class Cryptographer {
   encrypt(text,key) {
@@ -138,8 +140,8 @@ function removeFile(toRemove) {
 
 function downloadFile(toDownload) {
   listFolder(function(files) {
+    var cg = new Cryptographer();
     if ( files.indexOf("f" + toDownload) > -1 ) {
-      var cg = new Cryptographer();
       request.post({
         url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
         body: cg.encrypt(`${toDownload},download`,AUTH_KEY)
@@ -158,7 +160,35 @@ function downloadFile(toDownload) {
         }).pipe(decipher).pipe(write);
       });
     } else if ( files.indexOf("d" + toDownload) > -1 ) {
-      
+      request.post({
+        url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
+        body: cg.encrypt(`${toDownload},download`,AUTH_KEY)
+      },function(err,response,body) {
+        if ( err ) throw err;
+        if ( body == "error" ) {
+          throw new Error("Failed to communicate with server");
+          return;
+        }
+        var iv = cg.decrypt(body,AUTH_KEY);
+        var decipher = crypto.createDecipheriv("aes-256-cbc",Buffer.from(AUTH_KEY),Buffer.from(iv,"base64"));
+        var write = fs.createWriteStream(`${__dirname}/temp.zip`);
+        write.on("close",function() {
+          unzipProc = spawn("unzip",[`${__dirname}/temp.zip`,"-d",`./${toDownload}`]);
+          unzipProc.stdout.on("data",Function.prototype);
+          unzipProc.stderr.on("data",function(data) {
+            throw new Error(data);
+          });
+          unzipProc.on("close",function(code) {
+            fs.unlink(`${__dirname}/temp.zip`,function(err) {
+              if ( err ) throw err;
+            });
+          });
+        });
+        request.post({
+          url: `http://${IP}:5750/download?cid=${CLIENT_ID}`,
+          body: ""
+        }).pipe(decipher).pipe(write);
+      });
     } else {
       throw new Error("Invalid file or directory");
       return;
@@ -166,4 +196,4 @@ function downloadFile(toDownload) {
   });
 }
 
-downloadFile("another_one.sage");
+downloadFile("sage.txt");

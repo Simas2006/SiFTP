@@ -2,6 +2,7 @@ var fs = require("fs");
 var crypto = require("crypto");
 var express = require("express");
 var rimraf = require("rimraf");
+var archiver = require("archiver");
 var PORT = process.argv[3] || 5750;
 var PASSWORD = process.argv[2];
 var auth_keys = {};
@@ -124,14 +125,14 @@ app.post("/prepare",function(request,response) {
     } else {
       body = body.split(",");
       fs.stat(`${__dirname}/data/${body[0]}`,function(err,stats) {
-        if ( err || ["download","upload"].indexOf(body[1]) <= -1 ) {
+        if ( (err && (err.code != "ENOENT" || (err.code == "ENOENT" && body[1] == "download"))) || ["download","upload"].indexOf(body[1]) <= -1 ) {
           response.send("error");
         } else {
           var iv = crypto.randomBytes(16);
           preparations[request.query.cid] = {
             path: body[0],
             mode: body[1],
-            isDirectory: stats.isDirectory(),
+            isDirectory: body[1] == "download" ? stats.isDirectory() : body[2] == "directory",
             iv: iv
           }
           response.send(cg.encrypt(iv.toString("base64"),key));
@@ -147,10 +148,23 @@ app.post("/download",function(request,response) {
   } else {
     var key = auth_keys[request.query.cid];
     var data = preparations[request.query.cid];
+    var cipher = crypto.createCipheriv("aes-256-cbc",Buffer.from(key),data.iv);
     if ( ! data.isDirectory ) {
-      var cipher = crypto.createCipheriv("aes-256-cbc",Buffer.from(key),data.iv);
       var read = fs.createReadStream(`${__dirname}/data/${data.path}`);
       read.pipe(cipher).pipe(response);
+    } else {
+      var archive = archiver("zip",{
+        zlib: {level: 9}
+      });
+      archive.on("warning",function(err) {
+        if ( err.code != "ENOENT" ) throw err;
+      });
+      archive.on("error",function(err) {
+        if ( err.code != "ENOENT" ) throw err;
+      });
+      archive.pipe(cipher).pipe(response);
+      archive.directory(`${__dirname}/data/${data.path}`,false);
+      archive.finalize();
     }
   }
 });
