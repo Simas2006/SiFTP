@@ -57,6 +57,67 @@ function generateTable(files) {
   console.log(set.join("\n"));
 }
 
+function connectToHost(name,callback) {
+  var cg = new Cryptographer();
+  fs.readFile(__dirname + "/hosts.json",function(err,data) {
+    if ( err ) throw err;
+    data = JSON.parse(data.toString());
+    if ( ! data[name] ) {
+      throw new Error("Invalid host name");
+      return;
+    }
+    request.post({
+      url: `http://${data[name].ip}:5750/connect`,
+      body: cg.encrypt("siftp-authentication",data[name].password)
+    },function(err,response,body) {
+      if ( err ) throw err;
+      if ( body == "error" ) {
+        throw new Error("Failed to communicate with server");
+        return;
+      }
+      body = cg.decrypt(body,data[name].password).split(",");
+      CLIENT_ID = body[0];
+      AUTH_KEY = body[1];
+      IP = data[name].ip;
+      PATH = "/";
+      var obj = {
+        mode: "connected",
+        ip: IP,
+        clientID: CLIENT_ID,
+        key: AUTH_KEY,
+        path: PATH
+      }
+      fs.writeFile(__dirname + "/loginData.json",JSON.stringify(obj,null,2),function(err) {
+        if ( err ) throw err;
+        callback();
+      });
+    })
+  });
+}
+
+function disconnectFromHost(callback) {
+  loadParams(function() {
+    var cg = new Cryptographer();
+    request.post({
+      url: `http://${IP}:5750/disconnect?cid=${CLIENT_ID}`,
+      body: cg.encrypt("siftp-authentication",AUTH_KEY)
+    },function(err,response,body) {
+      if ( err ) throw err;
+      if ( body == "error" ) {
+        throw new Error("Failed to communicate with server");
+        return;
+      }
+      var obj = {
+        mode: "disconnected"
+      }
+      fs.writeFile(__dirname + "/loginData.json",JSON.stringify(obj,null,2),function(err) {
+        if ( err ) throw err;
+        callback();
+      });
+    });
+  });
+}
+
 function listFolder(callback) {
   loadParams(function() {
     var cg = new Cryptographer();
@@ -263,6 +324,6 @@ function uploadFile(toUpload,callback) {
   });
 }
 
-listFolder(function(files) {
-  console.log(files);
+disconnectFromHost(function() {
+  console.log("done");
 });

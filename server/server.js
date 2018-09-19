@@ -57,9 +57,22 @@ app.post("/connect",function(request,response) {
     if ( cg.decrypt(body,PASSWORD) == "siftp-authentication" ) {
       var id = Math.floor(Math.random() * 1e8);
       var key = cg.generateKey();
-      console.log(id,key);
       auth_keys[id] = key;
       response.send(cg.encrypt(`${id},${key}`,PASSWORD));
+    } else {
+      response.send("error");
+    }
+  });
+});
+
+app.post("/disconnect",function(request,response) {
+  getPostData(request,function(body) {
+    var cg = new Cryptographer();
+    var key = auth_keys[request.query.cid];
+    if ( cg.decrypt(body,key) == "siftp-authentication" ) {
+      auth_keys[request.query.cid] = null;
+      preparations[request.query.cid] = null;
+      response.send("ok");
     } else {
       response.send("error");
     }
@@ -187,13 +200,11 @@ app.post("/upload",function(request,response) {
           });
           request.pipe(decipher).pipe(write);
         } else {
-          console.log("here1")
           var write = fs.createWriteStream(`${__dirname}/temp.zip`);
           write.on("error",function(err) {
             throw err;
           })
           write.on("close",function() {
-            console.log("here2")
             unzipProc = exec(`yes | unzip ${__dirname}/temp.zip -d ${__dirname}/data/${data.path}`);
             unzipProc.stdout.on("data",Function.prototype);
             unzipProc.stderr.on("data",Function.prototype);
