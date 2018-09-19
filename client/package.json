@@ -9,6 +9,7 @@
   "author": "Simas Juknelis",
   "license": "MIT",
   "dependencies": {
+    "archiver": "^3.0.0",
     "request": "^2.88.0"
   }
 }
