@@ -1,7 +1,7 @@
 var fs = require("fs");
 var crypto = require("crypto");
 var request = require("request");
-var {spawn} = require("child_process");
+var {exec} = require("child_process");
 var IP,CLIENT_ID,AUTH_KEY,PATH;
 var unzipProc;
 
@@ -173,11 +173,9 @@ function downloadFile(toDownload) {
         var decipher = crypto.createDecipheriv("aes-256-cbc",Buffer.from(AUTH_KEY),Buffer.from(iv,"base64"));
         var write = fs.createWriteStream(`${__dirname}/temp.zip`);
         write.on("close",function() {
-          unzipProc = spawn("unzip",[`${__dirname}/temp.zip`,"-d",`./${toDownload}`]);
+          unzipProc = exec(`yes | unzip ${__dirname}/temp.zip -d ./${toDownload}`);
           unzipProc.stdout.on("data",Function.prototype);
-          unzipProc.stderr.on("data",function(data) {
-            throw new Error(data);
-          });
+          unzipProc.stderr.on("data",Function.prototype);
           unzipProc.on("close",function(code) {
             fs.unlink(`${__dirname}/temp.zip`,function(err) {
               if ( err ) throw err;
