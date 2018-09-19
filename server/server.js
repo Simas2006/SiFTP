@@ -169,6 +169,40 @@ app.post("/download",function(request,response) {
   }
 });
 
+app.post("/upload",function(request,response) {
+  if ( ! preparations[request.query.cid] || preparations[request.query.cid].type == "upload" ) {
+    response.send("error");
+  } else {
+    var key = auth_keys[request.query.cid];
+    var data = preparations[request.query.cid];
+    fs.stat(`${__dirname}/data/${data.path}`,function(err,stats) {
+      function merge() {
+        var decipher = crypto.createDecipheriv("aes-256-cbc",Buffer.from(key),data.iv);
+        if ( ! data.isDirectory ) {
+          var write = fs.createWriteStream(`${__dirname}/data/${data.path}`);
+          write.on("close",function() {
+            response.send("ok");
+          });
+          request.pipe(decipher).pipe(write);
+        }
+      }
+      if ( err ) {
+        if ( err.code != "ENOENT" ) throw err;
+        else merge();
+      } else if ( stats.isDirectory() ) {
+        rimraf(`${__dirname}/data/${data.path}`,{
+          disableGlob: true
+        },function(err) {
+          if ( err ) throw err;
+          merge();
+        });
+      } else {
+        merge();
+      }
+    });
+  }
+});
+
 app.get("/blank",function(request,response) {
   response.send("hi");
 });

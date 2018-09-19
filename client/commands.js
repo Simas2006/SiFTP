@@ -194,4 +194,34 @@ function downloadFile(toDownload) {
   });
 }
 
-downloadFile("nested")
+function uploadFile(toUpload) {
+  loadParams(function() {
+    var cg = new Cryptographer();
+    fs.stat(`./${toUpload}`,function(err,stats) {
+      if ( err ) throw err;
+      if ( ! stats.isDirectory() ) {
+        request.post({
+          url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
+          body: cg.encrypt(`${PATH}/${toUpload},upload,file`,AUTH_KEY)
+        },function(err,response,body) {
+          if ( err ) throw err;
+          if ( body == "error" ) {
+            throw new Error("Failed to communicate with server");
+            return;
+          }
+          var iv = cg.decrypt(body,AUTH_KEY);
+          var cipher = crypto.createCipheriv("aes-256-cbc",Buffer.from(AUTH_KEY),Buffer.from(iv,"base64"));
+          var read = fs.createReadStream(`./${toUpload}`);
+          read.pipe(cipher).pipe(request.post({
+            url: `http://${IP}:5750/upload?cid=${CLIENT_ID}`,
+            headers: {
+              "Content-Type": "application/octet-stream"
+            }
+          }));
+        });
+      }
+    });
+  });
+}
+
+uploadFile("sage.txt")
