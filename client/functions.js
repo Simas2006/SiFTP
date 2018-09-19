@@ -43,22 +43,8 @@ function loadParams(callback) {
   });
 }
 
-function generateTable(files) {
-  files = files.sort();
-  files = files.filter(item => item).map(item => [item.slice(1),item.charAt(0) == "d" ? "Directory" : "File"]);
-  files = [["Name","Type"]].concat(files);
-  var max = files.reduce((a,b) => Math.max(a,b[0].length),0);
-  var set = [];
-  for ( var i = 0; i < files.length; i++ ) {
-    set.push(`${files[i][0]}${" ".repeat(max - files[i][0].length)} | ${files[i][1]}`);
-    if ( i == 0 ) set.push("-".repeat(max + 12));
-  }
-  if ( files.length == 1 ) set.push("Directory empty");
-  console.log(set.join("\n"));
-}
-
 function onError(error) {
-  console.log(`\u001b[1m\u001b[33;1mError: \u001b[0m${error}`);
+  console.log(`\u001b[1m\u001b[31;1mError: \u001b[0m${error}`);
 }
 
 function connectToHost(name,callback) {
@@ -193,7 +179,7 @@ function removeFile(toRemove,callback) {
       var cg = new Cryptographer();
       request.post({
         url: `http://${IP}:5750/remove?cid=${CLIENT_ID}`,
-        body: cg.encrypt(toRemove,AUTH_KEY)
+        body: cg.encrypt(`${PATH}/${toRemove}`,AUTH_KEY)
       },function(err,response,body) {
         if ( err ) throw err;
         if ( body == "error" ) {
@@ -348,6 +334,12 @@ function uploadFile(toUpload,callback) {
   });
 }
 
-disconnectFromHost(function() {
-  console.log("done");
-})
+module.exports = {
+  connectToHost,
+  disconnectFromHost,
+  listFolder,
+  changeDirectory,
+  removeFile,
+  downloadFile,
+  uploadFile
+}
