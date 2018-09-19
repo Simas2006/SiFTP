@@ -1,6 +1,7 @@
 var fs = require("fs");
 var crypto = require("crypto");
 var request = require("request");
+var archiver = require("archiver");
 var {exec} = require("child_process");
 var IP,CLIENT_ID,AUTH_KEY,PATH;
 var unzipProc;
@@ -219,9 +220,39 @@ function uploadFile(toUpload) {
             }
           }));
         });
+      } else {
+        request.post({
+          url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
+          body: cg.encrypt(`${PATH}/${toUpload},upload,directory`,AUTH_KEY)
+        },function(err,response,body) {
+          if ( err ) throw err;
+          if ( body == "error" ) {
+            throw new Error("Failed to communicate with server");
+            return;
+          }
+          var iv = cg.decrypt(body,AUTH_KEY);
+          var cipher = crypto.createCipheriv("aes-256-cbc",Buffer.from(AUTH_KEY),Buffer.from(iv,"base64"));
+          var archive = archiver("zip",{
+            zlib: {level: 9}
+          });
+          archive.on("warning",function(err) {
+            if ( err.code != "ENOENT" ) throw err;
+          });
+          archive.on("error",function(err) {
+            if ( err.code != "ENOENT" ) throw err;
+          });
+          archive.pipe(cipher).pipe(request.post({
+            url: `http://${IP}:5750/upload?cid=${CLIENT_ID}`,
+            headers: {
+              "Content-Type": "application/octet-stream"
+            }
+          }));
+          archive.directory(`./${toUpload}`,false);
+          archive.finalize();
+        });
       }
     });
   });
 }
 
-uploadFile("sage.txt")
+uploadFile("thisisafile")

@@ -3,10 +3,12 @@ var crypto = require("crypto");
 var express = require("express");
 var rimraf = require("rimraf");
 var archiver = require("archiver");
+var {exec} = require("child_process");
 var PORT = process.argv[3] || 5750;
 var PASSWORD = process.argv[2];
 var auth_keys = {};
 var preparations = {};
+var unzipProc;
 var app = express();
 
 if ( ! PASSWORD ) throw new Error("No password provided");
@@ -184,6 +186,25 @@ app.post("/upload",function(request,response) {
             response.send("ok");
           });
           request.pipe(decipher).pipe(write);
+        } else {
+          console.log("here1")
+          var write = fs.createWriteStream(`${__dirname}/temp.zip`);
+          write.on("error",function(err) {
+            throw err;
+          })
+          write.on("close",function() {
+            console.log("here2")
+            unzipProc = exec(`yes | unzip ${__dirname}/temp.zip -d ${__dirname}/data/${data.path}`);
+            unzipProc.stdout.on("data",Function.prototype);
+            unzipProc.stderr.on("data",Function.prototype);
+            unzipProc.on("close",function(code) {
+              fs.unlink(`${__dirname}/temp.zip`,function(err) {
+                if ( err ) throw err;
+                response.send("ok");
+              });
+            });
+          });
+          request.pipe(decipher).pipe(write);
         }
       }
       if ( err ) {
@@ -197,7 +218,10 @@ app.post("/upload",function(request,response) {
           merge();
         });
       } else {
-        merge();
+        fs.unlink(`${__dirname}/data/${data.path}`,function(err) {
+          if ( err ) throw err;
+          merge();
+        });
       }
     });
   }
