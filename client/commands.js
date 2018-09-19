@@ -144,7 +144,7 @@ function downloadFile(toDownload) {
     if ( files.indexOf("f" + toDownload) > -1 ) {
       request.post({
         url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
-        body: cg.encrypt(`${toDownload},download`,AUTH_KEY)
+        body: cg.encrypt(`${PATH}/${toDownload},download`,AUTH_KEY)
       },function(err,response,body) {
         if ( err ) throw err;
         if ( body == "error" ) {
@@ -162,7 +162,7 @@ function downloadFile(toDownload) {
     } else if ( files.indexOf("d" + toDownload) > -1 ) {
       request.post({
         url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
-        body: cg.encrypt(`${toDownload},download`,AUTH_KEY)
+        body: cg.encrypt(`${PATH}/${toDownload},download`,AUTH_KEY)
       },function(err,response,body) {
         if ( err ) throw err;
         if ( body == "error" ) {
@@ -196,4 +196,4 @@ function downloadFile(toDownload) {
   });
 }
 
-downloadFile("sage.txt");
+downloadFile("nested")
