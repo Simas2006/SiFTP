@@ -57,13 +57,17 @@ function generateTable(files) {
   console.log(set.join("\n"));
 }
 
+function onError(error) {
+  console.log(`\u001b[1m\u001b[33;1mError: \u001b[0m${error}`);
+}
+
 function connectToHost(name,callback) {
   var cg = new Cryptographer();
   fs.readFile(__dirname + "/hosts.json",function(err,data) {
     if ( err ) throw err;
     data = JSON.parse(data.toString());
     if ( ! data[name] ) {
-      throw new Error("Invalid host name");
+      onError("Invalid host name");
       return;
     }
     request.post({
@@ -72,7 +76,7 @@ function connectToHost(name,callback) {
     },function(err,response,body) {
       if ( err ) throw err;
       if ( body == "error" ) {
-        throw new Error("Failed to communicate with server");
+        onError("Failed to communicate with server");
         return;
       }
       body = cg.decrypt(body,data[name].password).split(",");
@@ -98,13 +102,17 @@ function connectToHost(name,callback) {
 function disconnectFromHost(callback) {
   loadParams(function() {
     var cg = new Cryptographer();
+    if ( ! IP ) {
+      onError("Not currently connected to a server");
+      return;
+    }
     request.post({
       url: `http://${IP}:5750/disconnect?cid=${CLIENT_ID}`,
       body: cg.encrypt("siftp-authentication",AUTH_KEY)
     },function(err,response,body) {
       if ( err ) throw err;
       if ( body == "error" ) {
-        throw new Error("Failed to communicate with server");
+        onError("Failed to communicate with server");
         return;
       }
       var obj = {
@@ -127,7 +135,7 @@ function listFolder(callback) {
     },function(err,response,body) {
       if ( err ) throw err;
       if ( body == "error" ) {
-        throw new Error("Failed to communicate with server");
+        onError("Failed to communicate with server");
         return;
       }
       var files = cg.decrypt(body,AUTH_KEY).split(",");
@@ -155,7 +163,7 @@ function changeDirectory(toDir,callback) {
   } else {
     listFolder(function(files) {
       if ( files.indexOf("d" + toDir) <= -1 ) {
-        throw new Error("Invalid folder name in working directory");
+        onError("Invalid folder name in working directory");
         return;
       } else {
         PATH += "/" + toDir;
@@ -179,7 +187,7 @@ function changeDirectory(toDir,callback) {
 function removeFile(toRemove,callback) {
   listFolder(function(files) {
     if ( files.indexOf("d" + toRemove) <= -1 && files.indexOf("f" + toRemove) <= -1 ) {
-      throw new Error("Invalid file or directory");
+      onError("Invalid file or directory");
       return;
     } else {
       var cg = new Cryptographer();
@@ -189,7 +197,7 @@ function removeFile(toRemove,callback) {
       },function(err,response,body) {
         if ( err ) throw err;
         if ( body == "error" ) {
-          throw new Error("Failed to communicate with server");
+          onError("Failed to communicate with server");
           return;
         }
         callback();
@@ -208,7 +216,7 @@ function downloadFile(toDownload,callback) {
       },function(err,response,body) {
         if ( err ) throw err;
         if ( body == "error" ) {
-          throw new Error("Failed to communicate with server");
+          onError("Failed to communicate with server");
           return;
         }
         var iv = cg.decrypt(body,AUTH_KEY);
@@ -229,7 +237,7 @@ function downloadFile(toDownload,callback) {
       },function(err,response,body) {
         if ( err ) throw err;
         if ( body == "error" ) {
-          throw new Error("Failed to communicate with server");
+          onError("Failed to communicate with server");
           return;
         }
         var iv = cg.decrypt(body,AUTH_KEY);
@@ -252,7 +260,7 @@ function downloadFile(toDownload,callback) {
         }).pipe(decipher).pipe(write);
       });
     } else {
-      throw new Error("Invalid file or directory");
+      onError("Invalid file or directory");
       return;
     }
   });
@@ -262,7 +270,14 @@ function uploadFile(toUpload,callback) {
   loadParams(function() {
     var cg = new Cryptographer();
     fs.stat(`./${toUpload}`,function(err,stats) {
-      if ( err ) throw err;
+      if ( err ) {
+        if ( err.code != "ENOENT" ) {
+          throw err;
+        } else {
+          onError("Invalid file or directory");
+          return;
+        }
+      }
       if ( ! stats.isDirectory() ) {
         request.post({
           url: `http://${IP}:5750/prepare?cid=${CLIENT_ID}`,
@@ -270,7 +285,7 @@ function uploadFile(toUpload,callback) {
         },function(err,response,body) {
           if ( err ) throw err;
           if ( body == "error" ) {
-            throw new Error("Failed to communicate with server");
+            onError("Failed to communicate with server");
             return;
           }
           var iv = cg.decrypt(body,AUTH_KEY);
@@ -293,7 +308,7 @@ function uploadFile(toUpload,callback) {
         },function(err,response,body) {
           if ( err ) throw err;
           if ( body == "error" ) {
-            throw new Error("Failed to communicate with server");
+            onError("Failed to communicate with server");
             return;
           }
           var iv = cg.decrypt(body,AUTH_KEY);
@@ -315,12 +330,12 @@ function uploadFile(toUpload,callback) {
           },function(err,response,body) {
             if ( err ) {
               if ( err.code != "EPIPE" ) throw err;
-              else throw new Error("Server is busy processing other upload request");
+              else onError("Server is busy processing other upload request");
             }
             if ( body == "error" ) {
-              throw new Error("Failed to communicate with server");
+              onError("Failed to communicate with server");
             } else if ( body == "busy" ) {
-              throw new Error("Server is busy processing other upload request");
+              onError("Server is busy processing other upload request");
             } else {
               callback();
             }
@@ -333,10 +348,6 @@ function uploadFile(toUpload,callback) {
   });
 }
 
-connectToHost("main",function() {
-  uploadFile("uploadthisdir",function() {
-    disconnectFromHost(function() {
-      console.log("done");
-    })
-  })
+disconnectFromHost(function() {
+  console.log("done");
 })
