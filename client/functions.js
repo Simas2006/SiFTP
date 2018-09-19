@@ -313,8 +313,17 @@ function uploadFile(toUpload,callback) {
               "Content-Type": "application/octet-stream"
             }
           },function(err,response,body) {
-            if ( err ) throw err;
-            callback();
+            if ( err ) {
+              if ( err.code != "EPIPE" ) throw err;
+              else throw new Error("Server is busy processing other upload request");
+            }
+            if ( body == "error" ) {
+              throw new Error("Failed to communicate with server");
+            } else if ( body == "busy" ) {
+              throw new Error("Server is busy processing other upload request");
+            } else {
+              callback();
+            }
           }));
           archive.directory(`./${toUpload}`,false);
           archive.finalize();
@@ -324,6 +333,10 @@ function uploadFile(toUpload,callback) {
   });
 }
 
-disconnectFromHost(function() {
-  console.log("done");
-});
+connectToHost("main",function() {
+  uploadFile("uploadthisdir",function() {
+    disconnectFromHost(function() {
+      console.log("done");
+    })
+  })
+})

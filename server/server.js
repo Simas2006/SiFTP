@@ -9,6 +9,7 @@ var PASSWORD = process.argv[2];
 var auth_keys = {};
 var preparations = {};
 var unzipProc;
+var unzipperLocked = false;
 var app = express();
 
 if ( ! PASSWORD ) throw new Error("No password provided");
@@ -200,6 +201,11 @@ app.post("/upload",function(request,response) {
           });
           request.pipe(decipher).pipe(write);
         } else {
+          if ( unzipperLocked ) {
+            response.send("busy");
+            return;
+          }
+          unzipperLocked = true;
           var write = fs.createWriteStream(`${__dirname}/temp.zip`);
           write.on("error",function(err) {
             throw err;
@@ -211,7 +217,8 @@ app.post("/upload",function(request,response) {
             unzipProc.on("close",function(code) {
               fs.unlink(`${__dirname}/temp.zip`,function(err) {
                 if ( err ) throw err;
-                response.send("ok");
+                  unzipperLocked = false;
+                  response.send("ok");
               });
             });
           });
