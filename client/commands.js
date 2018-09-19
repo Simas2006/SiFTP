@@ -70,17 +70,12 @@ function listFolder(callback) {
         return;
       }
       var files = cg.decrypt(body,AUTH_KEY).split(",");
-      if ( callback ) {
-        callback(files);
-        return;
-      }
-      console.log(`Files at ${PATH}:\n`);
-      generateTable(files);
+      callback(files);
     });
   });
 }
 
-function changeDirectory(toDir) {
+function changeDirectory(toDir,callback) {
   if ( toDir == ".." ) {
     loadParams(function() {
       PATH = (PATH.split("/").slice(0,-1).join("/")) || "/";
@@ -93,6 +88,7 @@ function changeDirectory(toDir) {
       }
       fs.writeFile(__dirname + "/loginData.json",JSON.stringify(obj,null,2),function(err) {
         if ( err ) throw err;
+        callback();
       });
     });
   } else {
@@ -112,13 +108,14 @@ function changeDirectory(toDir) {
         }
         fs.writeFile(__dirname + "/loginData.json",JSON.stringify(obj,null,2),function(err) {
           if ( err ) throw err;
+          callback();
         });
       }
     });
   }
 }
 
-function removeFile(toRemove) {
+function removeFile(toRemove,callback) {
   listFolder(function(files) {
     if ( files.indexOf("d" + toRemove) <= -1 && files.indexOf("f" + toRemove) <= -1 ) {
       throw new Error("Invalid file or directory");
@@ -134,12 +131,13 @@ function removeFile(toRemove) {
           throw new Error("Failed to communicate with server");
           return;
         }
+        callback();
       });
     }
   });
 }
 
-function downloadFile(toDownload) {
+function downloadFile(toDownload,callback) {
   listFolder(function(files) {
     var cg = new Cryptographer();
     if ( files.indexOf("f" + toDownload) > -1 ) {
@@ -155,6 +153,9 @@ function downloadFile(toDownload) {
         var iv = cg.decrypt(body,AUTH_KEY);
         var decipher = crypto.createDecipheriv("aes-256-cbc",Buffer.from(AUTH_KEY),Buffer.from(iv,"base64"));
         var write = fs.createWriteStream(`./${toDownload}`);
+        write.on("close",function() {
+          callback();
+        });
         request.post({
           url: `http://${IP}:5750/download?cid=${CLIENT_ID}`,
           body: ""
@@ -180,6 +181,7 @@ function downloadFile(toDownload) {
           unzipProc.on("close",function(code) {
             fs.unlink(`${__dirname}/temp.zip`,function(err) {
               if ( err ) throw err;
+              callback();
             });
           });
         });
@@ -195,7 +197,7 @@ function downloadFile(toDownload) {
   });
 }
 
-function uploadFile(toUpload) {
+function uploadFile(toUpload,callback) {
   loadParams(function() {
     var cg = new Cryptographer();
     fs.stat(`./${toUpload}`,function(err,stats) {
@@ -218,6 +220,9 @@ function uploadFile(toUpload) {
             headers: {
               "Content-Type": "application/octet-stream"
             }
+          },function(err,response,body) {
+            if ( err ) throw err;
+            callback();
           }));
         });
       } else {
@@ -246,6 +251,9 @@ function uploadFile(toUpload) {
             headers: {
               "Content-Type": "application/octet-stream"
             }
+          },function(err,response,body) {
+            if ( err ) throw err;
+            callback();
           }));
           archive.directory(`./${toUpload}`,false);
           archive.finalize();
@@ -255,4 +263,6 @@ function uploadFile(toUpload) {
   });
 }
 
-uploadFile("thisisafile")
+listFolder(function(files) {
+  console.log(files);
+});
